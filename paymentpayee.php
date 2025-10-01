@@ -653,15 +653,7 @@ class PaymentPayee extends PaymentModule
 
         $externalOption->setCallToActionText($this->l($payment_name));
         $externalOption->setAction($this->context->link->getModuleLink($this->name, 'external', [], true));
-        /*
-		$externalOption->setInputs([
-            'token' => [
-                'name' => 'token',
-                'type' => 'hidden',
-                'value' => '[5cbfniD+(gEV<59lYbG/,3VmHiE<U46;#G9*#NP#X.FA§]sb%ZG?5Q{xQ4#VM|7',
-            ],
-        ]);
-		*/
+        
         $externalOption->setAdditionalInformation($this->context->smarty->fetch('module:paymentpayee/views/templates/front/paymentOptionExternal.tpl'));
         $externalOption->setLogo(Media::getMediaPath(_PS_MODULE_DIR_ . $this->name . '/views/img/option/external.png'));
 		

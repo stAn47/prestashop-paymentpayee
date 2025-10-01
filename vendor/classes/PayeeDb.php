@@ -1829,7 +1829,7 @@ id
 	 
 	  if (!empty($debug->sendmail))
 	  if (!empty($msgs)) {
-	   n_log::sendMail($debug->mailsubject, $msgs, 'info@zigo1.sk'); 
+	   n_log::sendMail($debug->mailsubject, $msgs); 
 	  }
 	  
   }
