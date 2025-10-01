@@ -2,7 +2,7 @@
     "type": "prestashop-module",
     "name": "prestashop/paymentpayee",
     "description": "PrestaShop module paymentpayee",
-    "homepage": "https://github.com/PrestaShop/paymentpayee",
+    "homepage": "https://github.com/stAn47/prestashop-paymentpayee",
     "license": "AFL-3.0",
     "authors": [
         {

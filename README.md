@@ -1,8 +1,8 @@
-# Example payment module
-test
+# Payment module for Payee.no
+
 ## About
 
-This repository provides an example to kick start your own payment module development. For more information, head on to the [Official Developer Documentation][documentation].
+This repository provides an prestashop payment module for Payee.no.
 
 ## Contributing
 
@@ -14,7 +14,5 @@ Just make sure to follow our [contribution guidelines][contribution-guidelines].
 
 This module is released under the [Academic Free License 3.0][AFL-3.0] 
 
-[documentation]: https://devdocs.prestashop-project.org/8/modules/payment/
 [prestashop]: https://www.prestashop-project.org/
-[contribution-guidelines]: https://devdocs.prestashop-project.org/8/contribute/contribution-guidelines/project-modules/
 [AFL-3.0]: https://opensource.org/licenses/AFL-3.0
