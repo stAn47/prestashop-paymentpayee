@@ -21,8 +21,9 @@ jobs:
 
       - name: Prepare PrestaShop ZIP
         run: |
-          mkdir package
-          mv . package/paymentpayee
+          mkdir -p package/paymentpayee
+          shopt -s dotglob
+          mv * package/paymentpayee/
           cd package
           zip -r paymentpayee.zip paymentpayee \
             -x '*.git*' '*.github*' '*/tests/*' '*/docs/*'
