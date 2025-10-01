@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>paymentpayee</name>
+    <displayName><![CDATA[Payment Payee.no]]></displayName>
+    <version><![CDATA[2.0.0]]></version>
+    <description><![CDATA[Payment Module Payee.no]]></description>
+    <author><![CDATA[PrestaShop]]></author>
+    <tab><![CDATA[payments_gateways]]></tab>
+    <is_configurable>1</is_configurable>
+    <need_instance>1</need_instance>
+</module>
