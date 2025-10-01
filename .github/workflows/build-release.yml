@@ -2,7 +2,8 @@ name: Build & Release PrestaShop Module
 
 on:
   push:
-  workflow_dispatch:   # allows manual trigger from GitHub UI
+    tags:
+      - 'v*'   # runs only when you push a tag like v1.0.0
 
 permissions:
   contents: write
@@ -32,12 +33,22 @@ jobs:
             -x '*.git*' '*.github*' '*/tests/*' '*/docs/*'
           mv paymentpayee.zip ../
 
+      - name: Delete old assets
+        run: |
+          assets=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/${{ steps.release_info.outputs.id }}/assets \
+            | jq -r '.[].id')
+          for asset_id in $assets; do
+            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/${{ github.repository }}/releases/assets/$asset_id
+          done
+
       - name: Publish to GitHub Release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.release_info.outputs.upload_url }}
-          asset_path: ./paymentpayee.zip
+          asset_path: paymentpayee.zip
           asset_name: paymentpayee.zip
           asset_content_type: application/zip
