@@ -31,7 +31,8 @@ jobs:
           cd package
           zip -r paymentpayee.zip paymentpayee \
             -x '*.git*' '*.github*' '*/tests/*' '*/docs/*'
-          mv paymentpayee.zip ../
+          mv paymentpayee.zip ../ \
+          cd ..
 
       - name: Delete old assets
         run: |
