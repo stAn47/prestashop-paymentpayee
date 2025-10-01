@@ -23,7 +23,10 @@ jobs:
         run: |
           mkdir -p package/paymentpayee
           shopt -s dotglob
-          mv * package/paymentpayee/
+          for f in *; do
+            [ "$f" = "package" ] && continue
+            mv "$f" package/paymentpayee/
+          done
           cd package
           zip -r paymentpayee.zip paymentpayee \
             -x '*.git*' '*.github*' '*/tests/*' '*/docs/*'
