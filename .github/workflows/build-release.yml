@@ -1,26 +1,20 @@
 name: Build & Release PrestaShop Module
 
 on:
+  workflow_dispatch:
   push:
-    tags:
-      - 'v*'   # runs only when you push a tag like v1.0.0
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - id: release_info
-        uses: toolmantim/release-drafter@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Prepare PrestaShop ZIP
+      - name: Prepare paymentpayee.zip
         run: |
           mkdir -p package/paymentpayee
           shopt -s dotglob
@@ -31,25 +25,27 @@ jobs:
           cd package
           zip -r paymentpayee.zip paymentpayee \
             -x '*.git*' '*.github*' '*/tests/*' '*/docs/*'
-          mv paymentpayee.zip ../ \
-          cd ..
+          mv paymentpayee.zip ../
 
-      - name: Delete old assets
-        run: |
-          assets=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/${{ steps.release_info.outputs.id }}/assets \
-            | jq -r '.[].id')
-          for asset_id in $assets; do
-            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              https://api.github.com/repos/${{ github.repository }}/releases/assets/$asset_id
-          done
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          draft: false
+          prerelease: false
 
-      - name: Publish to GitHub Release
+      - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.release_info.outputs.upload_url }}
-          asset_path: paymentpayee.zip
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./paymentpayee.zip
           asset_name: paymentpayee.zip
           asset_content_type: application/zip
+
+
