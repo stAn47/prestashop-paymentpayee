@@ -2,7 +2,7 @@
 <module>
     <name>paymentpayee</name>
     <displayName><![CDATA[Payment Payee.no]]></displayName>
-    <version><![CDATA[2.0.1]]></version>
+    <version><![CDATA[2.0.2]]></version>
     <description><![CDATA[Payment Module Payee.no]]></description>
     <author><![CDATA[PrestaShop]]></author>
     <tab><![CDATA[payments_gateways]]></tab>
