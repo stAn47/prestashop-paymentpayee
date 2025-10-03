@@ -34,9 +34,15 @@ class PaymentPayeeWkcronModuleFrontController extends ModuleFrontController
     {
         parent::__construct();
         //for testing: 
-        $this->todayDate = date('Y-m-d',strtotime(' +5 day'));
-        //$this->todayDate = date('Y-m-d');
-        $this->todayDateTime = date('Y-m-d H:i:s', strtotime(' +5 day'));
+        $test = false; 
+        if ($test) { 
+            $this->todayDate = date('Y-m-d',strtotime(' +5 day'));
+            $this->todayDateTime = date('Y-m-d H:i:s', strtotime(' +5 day'));
+        }
+        else {
+            $this->todayDate = date('Y-m-d');
+            $this->todayDateTime = date('Y-m-d H:i:s'); 
+        }
     }
 
     /**
