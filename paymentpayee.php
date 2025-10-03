@@ -505,8 +505,14 @@ class PaymentPayee extends PaymentModule
 
     private static $alreadyExecuted = array();
     public function hookWkCreateSubscriptionOrderForPayee(array $params) {
-        
-        
+        $x = debug_backtrace();
+        $t = array(); 
+        foreach ($x as $l) {
+            $t[] = @$l['file'].':'.@$l['line']; 
+        }
+        $bck = implode("\n", $t); 
+        $msg = 'Subscription invocation with data:'."\n".var_export($params, true)."\n".' Backtrace: '.$bck; 
+        //PrestaShopLogger::addLog($msg); 
         $subscriptionData = $params['subscriptionData']; 
         $context = $params['context']; 
         $id_cart = (int)$params['id_cart']; 
@@ -720,7 +726,7 @@ class PaymentPayee extends PaymentModule
             }';
             $jsonObj = json_decode($requestBody);
             
-            PrestaShopLogger::addLog('PaymentPayee: hookWkCreateSubscriptionOrderForPayee executed with subscription datas: '.var_export($subscriptionData, true)); 
+            PrestaShopLogger::addLog('PaymentPayee: hookWkCreateSubscriptionOrderForPayee executed with subscription datas: '.var_export($subscriptionData, true).' Backtrace:'.$bck); 
             if (empty($jsonObj)) {
                 return false;
             }
@@ -766,7 +772,8 @@ class PaymentPayee extends PaymentModule
 		            $arr['public_key'] = PAYEE_CONFIG_ACCESS_KEY; 
 		            $arr['data_sent'] = json_encode($jsonObj); 
 		            $arr['last_data'] = json_encode($tr); 
-		            //$arr['created_on'] = 0; 
+		            
+                    if (empty($arr['created_on'])) $arr['created_on'] = 'UTC_TIMESTAMP'; 
 		            $arr['status'] = $tr->status; 
 		            $arr['currency_id'] = $currency_id; 
 		            $arr['amount'] = $order_total_int; 

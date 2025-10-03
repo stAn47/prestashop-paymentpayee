@@ -7,12 +7,15 @@ class AdminSubscriptionController extends ModuleAdminController
         parent::__construct();
         $this->bootstrap = true; // Use PrestaShop BO styling
     }
-
+    public static $justOnce = false; 
     public function initContent()
     {
         parent::initContent();
+        if (empty(static::$justOnce)) {
+            static::$justOnce = true; 
 
         $id_order = (int) Tools::getValue('id_order');
+        
         $action   = Tools::getValue('action');
         
         require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
@@ -111,6 +114,20 @@ if ($row) {
     }
 }
         if ($action === 'recurNow') {
+
+
+            $session = \PrestaShop\PrestaShop\Adapter\SymfonyContainer::getInstance()->get('session');
+        if ($session->has('subscription_run_'.$id_order)) {
+            // prevent double execution
+            $idOrder2 = $session->get('subscription_run_'.$id_order);
+            $this->confirmations[] = $this->l('This order id had been already done, it is blocked in current session, last created order ID for this subscription = '.$idOrder2);
+            $this->setTemplate('subscription_result.tpl');
+
+            return;
+        }
+        $session->set('subscription_run_'.$id_order, true);
+
+
             if (Module::isEnabled('wkproductsubscription')) {
                 include_once _PS_MODULE_DIR_ . 'wkproductsubscription/classes/WkSubscriptionRequired.php';
             }
@@ -134,7 +151,12 @@ if ($row) {
         $new_idCart = $controller->createSubscriberCart($subscriptionData);
              $error = ''; 
              $params = ['subscriptionData' => $subscriptionData, 'context' => $this->context, 'id_cart'=>$new_idCart, 'idOrder'=>&$idOrder, 'classRef'=>$controller, 'error'=>&$error];
-             Hook::exec('WkCreateSubscriptionOrderForPayee', $params);
+             //Hook::exec('WkCreateSubscriptionOrderForPayee', $params);
+             $module_name = $subscriptionData['payment_module'];
+        if (Validate::isModuleName($module_name)) {
+            $payment_module = Module::getInstanceByName('paymentpayee');
+            $payment_module->hookWkCreateSubscriptionOrderForPayee($params); 
+        }
              if (!empty($error)) {
                     $this->confirmations[] = $this->l('Recur Error: '.$error);
                 }
@@ -168,6 +190,9 @@ if ($row) {
                                 $scheudleObj->active = 1;
                                 $scheudleObj->save();
                                 $this->confirmations[] = $this->l('Recur Now executed successfully - new Order ID = '.$idOrder);
+
+
+                                $session->set('subscription_run_'.$id_order, (int)$idOrder);
                             }
              }
 
@@ -189,6 +214,7 @@ if ($row) {
         
                 */
             }
+        }
         $this->setTemplate('subscription_result.tpl');
 
     }

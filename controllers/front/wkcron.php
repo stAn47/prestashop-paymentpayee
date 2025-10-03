@@ -34,10 +34,11 @@ class PaymentPayeeWkcronModuleFrontController extends ModuleFrontController
     {
         parent::__construct();
         //for testing: 
-        $test = false; 
-        if ($test) { 
-            $this->todayDate = date('Y-m-d',strtotime(' +5 day'));
-            $this->todayDateTime = date('Y-m-d H:i:s', strtotime(' +5 day'));
+        //stan - security consideration - this means that the token must be secret ! otherwise we can execute future subscriptions
+        $test = (int)\Tools::getValue('test');
+        if (!empty($test)) { 
+            $this->todayDate = date('Y-m-d',strtotime(' +'.(int)$test.' day'));
+            $this->todayDateTime = date('Y-m-d H:i:s', strtotime(' +'.(int)$test.' day'));
         }
         else {
             $this->todayDate = date('Y-m-d');
@@ -394,14 +395,13 @@ class PaymentPayeeWkcronModuleFrontController extends ModuleFrontController
             echo 'Total Order Created: ' . $total_order_create;
             echo '<br>';
             echo 'Total Subscription Resumed: ' . $total_subs_resume;
-            $file = fopen(dirname(__FILE__) . '/../../cron_logs.log', 'a');
+            
             $msg = "\r\n\n";
             $msg .= '[' . date('d-m-Y H:i:s') . ']  ----  Cron run successfully run on ' . $this->todayDateTime . "\n";
             $msg .= '---------------- Total Order Scheduled for Tomorrow: ' . $total_order_scheduled . "\n";
             $msg .= '---------------- Total Order Created: ' . $total_order_create . "\n";
             $msg .= '---------------- Shop: ' . $this->context->shop->name . ' (ID: ' . $this->context->shop->id . ')';
-            fwrite($file, $msg);
-            fclose($file);
+            PrestaShopLogger::addLog($msg); 
             exit;
         } else {
             exit('Invalid link.');
@@ -563,7 +563,8 @@ class PaymentPayeeWkcronModuleFrontController extends ModuleFrontController
         $module_name = $subscriptionData['payment_module'];
         if (Validate::isModuleName($module_name)) {
             $payment_module = Module::getInstanceByName('paymentpayee');
-            $params = ['subscriptionData' => $subscriptionData, 'context' => $this->context, 'id_cart'=>$id_cart, 'idOrder'=>&$idOrder, 'classRef'=>$this];
+            $error = ''; 
+            $params = ['subscriptionData' => $subscriptionData, 'context' => $this->context, 'id_cart'=>$id_cart, 'idOrder'=>&$idOrder, 'classRef'=>$this, 'error'=>&$error];
             return $payment_module->hookWkCreateSubscriptionOrderForPayee($params); 
         }
     }
