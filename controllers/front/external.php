@@ -187,7 +187,8 @@ class PaymentPayeeExternalModuleFrontController extends ModuleFrontController
 		$root = $base_url = (Configuration::get('PS_SSL_ENABLED') ? 'https://' : 'http://') . Tools::getShopDomainSsl().__PS_BASE_URI__;
 		
 		$demoData->tos_url = $root; 
-		$order_reference = $cart->id.date('Ymdhis'); 
+		$order_reference = $cart->id.'-'.date('Ymdhis'); 
+
 		$demoData->orderid = $order_reference; 		
 		
 		$jsonObj = payee::getPaymentJson($is_live, $demoData); 

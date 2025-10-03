@@ -25,4 +25,5 @@
     </div>
     <p>{l s='This order has been paid with %moduleDisplayName%.' mod='paymentpayee' sprintf=['%moduleDisplayName%' => $moduleDisplayName]}</p>
   </div>
+ 
 </section>
