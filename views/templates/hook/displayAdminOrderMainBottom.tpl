@@ -28,5 +28,29 @@
     <div class="card-body">
       <p>{l s='This order has been paid with %moduleDisplayName%.' mod='paymentpayee' sprintf=['%moduleDisplayName%' => $moduleDisplayName]}</p>
     </div>
+  {if $details}
+  <div class="card-body">
+    <details><summary>Transaction Details ID={$transaction_id} ({$status})</summary><pre>{$details}</pre></details>
   </div>
+  {/if}
+  <!-- Debug: issubscription={$issubscription} -->
+  {if $issubscription}
+  <div class="card-body">
+    <a href=href="{$link->getAdminLink('AdminSubscription')}&action=testSubscription&id_order={$id_order}"
+       class="btn btn-info">
+        {l s='Verify Subscription' mod='paymentpayee'}
+    </a>
+    <a href="{$link->getAdminLink('AdminSubscription')}&action=recurNow&id_order={$id_order}"
+       class="btn btn-success">
+       {l s='Do Payment Now' mod='paymentpayee'}
+    </a>
+     <a href="{$link->getAdminLink('AdminSubscription')}&action=cancel&id_order={$id_order}"
+       class="btn btn-danger">
+       {l s='Cancel Now' mod='paymentpayee'}
+    </a>
+    </div>
+  {/if}
+
+  </div>
+   
 </section>

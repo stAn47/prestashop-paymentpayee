@@ -69,6 +69,33 @@ class PaymentpayeeNotifyModuleFrontController extends ModuleFrontController
 			{
 
                 $isPaid = payee::isPaid($tr);
+                $tr_row = Db::getInstance()->getRow('
+    SELECT *
+    FROM '._DB_PREFIX_.'order_payeedata
+    WHERE `order_id` = '.(int) $cartId.' and `is_live` = '.(int)$is_live.' and `transaction_id` = '.(int)$transactionId
+    );
+            if (empty($tr_row)) {
+                throw new Exception('Transaction not found'); 
+            }
+
+                $arr = array(); 
+		$arr['id'] = (int)$tr_row['id']; 
+		$arr['order_id'] = (int)$cartId; 
+		$arr['transaction_id'] = $transactionId; 
+		$arr['recurrence_token'] = $tr->recurrence_token; 
+		$arr['is_live'] = (int)$is_live; 
+		$arr['public_key'] = PAYEE_CONFIG_ACCESS_KEY; 
+		
+		$arr['last_data'] = json_encode($tr); 
+		
+		$arr['status'] = $tr->status; 
+		
+		
+		try { 
+			n_mini::insertArray('#__order_payeedata', $arr); 
+		}
+			catch(Exception $e) {
+		}
 
                 if ($isPaid) { // if payment success create new order now.
  

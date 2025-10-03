@@ -56,11 +56,8 @@ class payee {
 	//this is going to recur a transaction which had already been done per existing recur token
 	//a difference against recurTransaction is that this one allows to set a different description and references compared to recurTransaction
 	//and thus a different/new return/notify URL's will be triggered 
-	public static function recurPayment($is_live, $rt) {
-		if (empty(self::$configFile)) {
-			throw new Exception('Please use payee::setConfig(\'config.php\') to set default customer datas for unit testing.', 500); 
-		}
-		require(self::$configFile);  
+	public static function recurPayment($is_live, $rt, $demoData) {
+		
 		$jsonObj = self::getPaymentJson($is_live, $demoData); 
 		if (!isset($jsonObj->customer)) $jsonObj->customer = new stdClass(); 
 		
@@ -79,7 +76,7 @@ class payee {
 		//$jsonObj->payment->operation = 'unscheduled_purchase';
 		$jsonObj->order->merchant_reference = 'RECUR-'.time(); 
 		
-		return self::sendJson($entryPoint, $jsonObj); 
+		return self::sendJson($jsonObj); 
 	} 
 	//production ready, is made similar to https://docs.dintero.com/checkout-api.html#operation/checkout_session_post
 	
@@ -251,7 +248,8 @@ class payee {
 		curl_setopt($curl, CURLOPT_FAILONERROR, false);
 		
 		$rawResponse = curl_exec($curl);
-		 
+		$error = curl_error($curl);     // human-readable message 
+		$http = curl_getinfo($curl, CURLINFO_RESPONSE_CODE); // e.g., 200, 404
 		curl_close($curl);  
 	
 		$response = json_decode($rawResponse);		
@@ -261,8 +259,13 @@ class payee {
 		}
 
 		if ((empty($response) || (!isset($response->id)))) {
+			var_dump($rawResponse); 
+			var_dump($requestBody); 
+			var_dump($checkoutUrl); 
 			
-			throw new Exception('Malformatted response from payee.no'); 
+			$msg = 'Malformatted response from payee.no, http response = '.$http.', error='.$error; 
+			die($msg); 
+			throw new Exception($msg); 
 			self::debug($rawResponse); 
 			
 		}
@@ -283,7 +286,7 @@ class payee {
 		
 		
 		$jsonObj = self::getPaymentJson($is_live, $demoData); 
-		return self::sendJson($entryPoint, $jsonObj); 
+		return self::sendJson($jsonObj); 
 	
 	}
 	
@@ -446,7 +449,44 @@ $headers = array(
 		
 		return json_decode($rawResponse); 
 	}
-	
+	public static function deleteToken($transaction_id) {
+		$authResponse = self::auth(); 
+		$token = $authResponse->access_token; 
+$headers = array(
+    'Content-Type: application/json',
+    'Accept: application/json',
+    'Authorization: Bearer ' . $token
+);
+
+		//$checkTransactionUrl = PAYEE_ENDPOINT."/transactions/{transaction_id}/cancel";
+		$checkTransactionUrl = PAYEE_ENDPOINT."/transactions/{transaction_id}/deletetoken";
+		$checkTransactionUrl = str_replace('{transaction_id}', $transaction_id, $checkTransactionUrl); 
+		
+		
+		
+		$curl = curl_init();
+		curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "PATCH");
+		
+		curl_setopt($curl, CURLOPT_URL, $checkTransactionUrl);
+		curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+		curl_setopt($curl, CURLOPT_FAILONERROR, false);
+
+		$rawResponse = curl_exec($curl);
+		curl_close($curl); 
+		
+		$testx = json_encode(json_decode($rawResponse), JSON_PRETTY_PRINT); 
+		self::debug(__FUNCTION__.': - '.$checkTransactionUrl); 
+		$ret = json_decode($rawResponse); 
+		if (empty($ret)) {
+			self::debug($rawResponse); 
+		}
+		else {
+			self::debug(json_encode($ret, JSON_PRETTY_PRINT));
+		}
+		
+		return json_decode($rawResponse); 
+	}
 	public static function verifyTransaction($transaction_id) {
 		
 		$authResponse = self::auth(); 

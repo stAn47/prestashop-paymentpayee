@@ -60,6 +60,7 @@ class PaymentPayee extends PaymentModule
         'displayPaymentByBinaries',
         'displayPaymentReturn',
         'displayPDFInvoice',
+        'WkCreateSubscriptionOrderForPayee',
     ];
 	public function hookActionOrderConfirmation($params) {
 		
@@ -342,18 +343,503 @@ class PaymentPayee extends PaymentModule
         }
 
         $order = new Order((int) $params['id_order']);
-
+        $id_order = (int)$params['id_order']; 
         if (false === Validate::isLoadedObject($order) || $order->module !== $this->name) {
             return '';
         }
+        
+        require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
+        if (n_mini::tableExists('#__order_payeedata')) { 
+         $row = Db::getInstance()->getRow('
+    SELECT *
+    FROM '._DB_PREFIX_.'order_payeedata
+    WHERE order_id = '.(int) $order->id_cart
+);
+   
+         require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
+		require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/payee.php');
 
+         $is_live = Configuration::get(PaymentPayee::CONFIG_LIVE);
+		 if (!defined('PAYEE_CONFIG_ACCESS_KEY')) 
+         if (!empty($is_live)) {
+			define('PAYEE_CONFIG_ACCESS_KEY', Configuration::get(PaymentPayee::CONFIG_LIVE_ACCESS_KEY));
+			define('PAYEE_CONFIG_SECRET_KEY', Configuration::get(PaymentPayee::CONFIG_LIVE_SECRET_KEY));
+			define('PAYEE_CONFIG_MERCHANT_NUMBER', Configuration::get(PaymentPayee::CONFIG_LIVE_MERCHANT_NUMBER));
+			define('PAYEE_ENDPOINT', "https://checkout.payee.no/api/v1");
+			$is_live = true;
+		}
+		else {
+			define('PAYEE_CONFIG_ACCESS_KEY', Configuration::get(PaymentPayee::CONFIG_STAGING_ACCESS_KEY));
+			define('PAYEE_CONFIG_SECRET_KEY',  Configuration::get(PaymentPayee::CONFIG_STAGING_SECRET_KEY));
+			define('PAYEE_CONFIG_MERCHANT_NUMBER', Configuration::get(PaymentPayee::CONFIG_STAGING_MERCHANT_NUMBER));
+			define('PAYEE_ENDPOINT', "https://test.checkout.payee.no/api/v1");
+			$is_live = false;
+		}
+        $tr = false; 
+        if (!empty($row) && (!empty($row['transaction_id']))) {
+         $transactionId = $row['transaction_id']; 
+         $tr = payee::getTransaction($transactionId);
+        }
+         if (!empty($tr)) {
+            if (!empty($tr->recurrence_token) && (empty($row['recurrence_token']))) {
+                $row['recurrence_token'] = $tr->recurrence_token;
+                n_mini::insertArray('#__order_payeedata', $row); 
+                
+                foreach ($order->getProducts() as $product) {
+                                $this->saveRecurringToken(
+                                    $tr->recurrence_token,
+                                    $order,
+                                    $product,
+                                    $order->id_cart
+                                );
+                            }
+            
+            
+            }
+
+
+
+         }
+    }
+
+
+        $isSubscription = false; 
+        if (Module::isEnabled('wkproductsubscription')) {
+            include_once _PS_MODULE_DIR_ . 'wkproductsubscription/classes/WkSubscriptionRequired.php';
+            $this->createAdminTab(); 
+            $isSubscription = (bool) WkProductSubscriptionGlobal::isSubscriptionOrder((int) $id_order);
+            /*$isSubscription = (bool) Db::getInstance()->getValue('
+    SELECT COUNT(*) 
+    FROM '._DB_PREFIX_.'wk_subscription_orders
+    WHERE id_order = '.(int) $id_order
+);
+            */
+        }
+        $status = false; 
+        $details = ''; 
+        if (!empty($tr)) {
+            $status = $tr->status; 
+            $details = json_encode($tr, JSON_PRETTY_PRINT); 
+            if (empty($tr->recurrence_token)) $isSubscription = false; 
+        }
+      
+        if (empty($details)) $isSubscription = false; 
+        
         $this->context->smarty->assign([
             'moduleName' => $this->name,
             'moduleDisplayName' => $this->displayName,
             'moduleLogoSrc' => $this->getPathUri() . 'logo.png',
+            'issubscription' => $isSubscription,
+            'id_order'=> $id_order,
+            'link' => $this->context->link,
+            'status'=>$status,
+            'details' => $details,
+            'transaction_id' => $transactionId,
         ]);
 
-        return $this->context->smarty->fetch('module:paymentpayee/views/templates/hook/displayAdminOrderMainBottom.tpl');
+        $html = $this->context->smarty->fetch('module:paymentpayee/views/templates/hook/displayAdminOrderMainBottom.tpl');
+        //$html .= '<details><summary>Transaction Details ('.$tr->status.')</summary><pre>'.json_encode($tr, JSON_PRETTY_PRINT).'</pre></details>'; 
+        //$html .= 's='.var_export($isSubscription, true); 
+        
+        return $html; 
+    }
+
+    public function checkUpgrade() {
+         $this->createAdminTab(); 
+         foreach (PaymentPayee::HOOKS as $hook) {
+                if (!$this->isRegisteredInHook($hook)) {
+                    $this->registerHook($hook);
+                }
+             }
+    }
+    //stAn - if WK doesn't update their plugin we might need to add hook here
+    public function validateOrderRemoved(
+    $id_cart,
+    $id_order_state,
+    $amount_paid,
+    $payment_method = 'Unknown',
+    $message = null,
+    $extra_vars = [],
+    $currency_special = null,
+    $dont_touch_amount = false,
+    $secure_key = false,
+    Shop $shop = null
+) {
+    $original_order_status = $id_order_state; 
+    // Example: force order to start as "Awaiting payment" instead of whatever was passed
+    if ($this->isAutoSubscription($id_cart)) {
+        $id_order_state = Configuration::get('PS_OS_AWAITING_PAYMENT');
+    }
+    
+    parent::validateOrder(
+        $id_cart,
+        $id_order_state,
+        $amount_paid,
+        $payment_method,
+        $message,
+        $extra_vars,
+        $currency_special,
+        $dont_touch_amount,
+        $secure_key,
+        $shop
+    );
+     if ($this->isAutoSubscription($id_cart)) {
+        
+     }
+   
+    // At this point, the order exists with the altered status
+    }
+
+    private function isAutoSubscription($cart_id) {
+        $x = debug_backtrace(); 
+        foreach ($x as $l) {
+            if (isset($l['file'])) {
+                //called from cron: 
+                if (strpos($l['file'], 'wkproductsubscription') !== false) {
+                    return true; 
+                } 
+            }
+        }
+        return false; 
+    }
+
+    private static $alreadyExecuted = array();
+    public function hookWkCreateSubscriptionOrderForPayee(array $params) {
+        
+        
+        $subscriptionData = $params['subscriptionData']; 
+        $context = $params['context']; 
+        $id_cart = (int)$params['id_cart']; 
+        
+        //stAn - hook might be registered to FE and BE
+        if (isset(self::$alreadyExecuted[$id_cart])) return; 
+        self::$alreadyExecuted[$id_cart] = true; 
+
+        $ref = $params['classRef']; 
+       
+        $module_name = $subscriptionData['payment_module'];
+        if (empty($subscriptionData['payment_response'])) return false; 
+        $tk = json_decode($subscriptionData['payment_response']);
+        if (empty($tk)) return false; 
+        if (empty($tk->token)) return; 
+        $token = $tk->token; 
+
+        if ($module_name !== 'paymentpayee') return null; 
+
+        if (Validate::isModuleName($module_name)) {
+
+            $this->module = Module::getInstanceByName('wkproductsubscription');
+
+            $payment_module = Module::getInstanceByName('paymentpayee');
+            require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/payee.php');
+            require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
+            $is_live = Configuration::get($payment_module::CONFIG_LIVE);
+            if (!defined('PAYEE_CONFIG_ACCESS_KEY'))
+            if (!empty($is_live)) {
+                define('PAYEE_CONFIG_ACCESS_KEY', Configuration::get($payment_module::CONFIG_LIVE_ACCESS_KEY));
+                define('PAYEE_CONFIG_SECRET_KEY', Configuration::get($payment_module::CONFIG_LIVE_SECRET_KEY));
+                define('PAYEE_CONFIG_MERCHANT_NUMBER', Configuration::get($payment_module::CONFIG_LIVE_MERCHANT_NUMBER));
+                define('PAYEE_ENDPOINT', "https://checkout.payee.no/api/v1");
+                $is_live = true;
+            }
+            else {
+                define('PAYEE_CONFIG_ACCESS_KEY', Configuration::get($payment_module::CONFIG_STAGING_ACCESS_KEY));
+                define('PAYEE_CONFIG_SECRET_KEY',  Configuration::get($payment_module::CONFIG_STAGING_SECRET_KEY));
+                define('PAYEE_CONFIG_MERCHANT_NUMBER', Configuration::get($payment_module::CONFIG_STAGING_MERCHANT_NUMBER));
+                define('PAYEE_ENDPOINT', "https://test.checkout.payee.no/api/v1");
+                $is_live = false;
+            }
+            $cart = new Cart((int) $id_cart);
+             
+            if ((float) $cart->getOrderTotal(true, Cart::BOTH) != (float) $subscriptionData['raw_total_amount']) {
+                $orderObj = new Order((int) $subscriptionData['first_order_id']);
+                $ref->createSpcificProductPrice(
+                    $id_cart,
+                    $subscriptionData['id_product'],
+                    $subscriptionData['id_product_attribute'],
+                    $subscriptionData['raw_base_price'] + $orderObj->total_shipping_tax_excl
+                );
+                $ref->updateFreeShipping($id_cart);
+            }
+
+            Context::getContext()->currency = new Currency((int) $cart->id_currency);
+            Context::getContext()->customer = new Customer((int) $cart->id_customer);
+            $address = new Address($cart->id_address_delivery);
+            Context::getContext()->country = new Country((int) $address->id_country);
+            Context::getContext()->cart = $cart;
+
+            $currency_id = (int)$cart->id_currency; 
+            // get cron set order status for new order
+            $current_state = (int) Configuration::get('WK_SUBSCRIPTION_CRON_ORDER_STATUS');
+
+            $total_order_amount = $cart->getOrderTotal(true, Cart::BOTH);
+            $address = new Address($cart->id_address_invoice);
+            $country_iso_code = Country::getIsoById($address->id_country);
+            $customer = new Customer((int) $cart->id_customer);
+            $language = new Language((int) $cart->id_lang);
+            //validate data first:
+            $base_url = Tools::getShopDomainSSL(true) . __PS_BASE_URI__;
+            $return_url = $base_url.'module/paymentpayee/redirect?cartid='.$cart->id;
+            $callback_url = $base_url.'module/paymentpayee/notify?cartid='.$cart->id;
+            $link = new Link();
+            $cart_link = $link->getPageLink(
+                'order',
+                true,
+                (int) $cart->id_lang,
+                [
+                    'step' => 1,
+                ]
+            );
+            $demoData = new stdClass();
+            $cancel_url = $cart_link;
+            $demoData->cancel_url = $cancel_url;
+            $locale = $language->locale;
+
+            $locale = str_replace('_', '-', $locale);
+            $currency = new Currency($cart->id_currency);
+            $rounded_total_order_amount_float = Tools::convertPrice($total_order_amount, $currency);
+            $order_total_int = round($rounded_total_order_amount_float * 100);
+            $demoData->amount = $order_total_int;
+            $currency_iso_code = $currency->iso_code;
+            $demoData->currency = strtoupper($currency_iso_code);
+            $demoData->language = $locale;
+            $demoData->email = $customer->email;
+            $demoData->zip = $address->postcode;
+            $demoData->country = $country_iso_code;
+            $demoData->street = $address->address1;
+            $demoData->name = $address->firstname.' '.$address->lastname;
+            $demoData->city = $address->city;
+            $demoData->company_name = $address->company;
+            $demoData->phoneNumber = $address->phone;
+            $order_reference = $cart->id.'-'.date('Ymdhis').'-RECUR';
+            $demoData->orderid = $order_reference;
+            if (isset($_SERVER['REMOTE_ADDR'])) {
+                $demoData->customer_ip = $_SERVER['REMOTE_ADDR'];
+            }
+            else {
+                $demoData->customer_ip = '';
+            }
+            if (isset($_SERVER['HTTP_USER_AGENT'])) {
+                $demoData->user_agent = $_SERVER['HTTP_USER_AGENT'];
+            }
+            else {
+                $demoData->user_agent = '';
+            }
+            $language = 'nb-NO';
+            if (!empty($demodata->language)) {
+                $language = $demodata->language;
+            }
+
+            if (!in_array($language, array('sv-SE', 'nb-NO', 'da-DK', 'en-US', 'fi-FI')))
+            {
+                $language = 'nb-NO';
+            }
+
+
+            $demoData->return_url = $return_url;
+            $demoData->callback_url = $callback_url;
+            $root = $base_url = (Configuration::get('PS_SSL_ENABLED') ? 'https://' : 'http://') . Tools::getShopDomainSsl().__PS_BASE_URI__;
+            $demoData->tos_url = $root;
+            $demoData->customer_id = $customer->email;
+            $st_obj = new stdClass();
+            $bt_obj = new stdClass();
+            $st_obj->phone_number = $demoData->phoneNumber;
+            $bt_obj->phone_number = $demoData->phoneNumber;
+            $st_obj->business_name = $demoData->company_name;
+            $bt_obj->business_name = $demoData->company_name;
+            $st_obj->name = $demoData->name;
+            $bt_obj->name = $demoData->name;
+            $st_obj->street = $demoData->street;
+            $bt_obj->street = $demoData->street;
+            $st_obj->postal_code = $demoData->zip;
+            $bt_obj->postal_code = $demoData->zip;
+            $st_obj->city = $demoData->city;
+            $bt_obj->city = $demoData->city;
+
+            $st_obj->country = $demoData->country;
+            $bt_obj->country = $demoData->country;
+            $st_obj->email = $demoData->email;
+            $bt_obj->email = $demoData->email;
+            $requestBody = '{
+                "configuration": {
+                    "live": '.json_encode((bool)$is_live).',
+                    "language": '.json_encode($language).',
+                    "auto_capture": '.json_encode((bool)true).',
+                    "default_payment_type": "payex.creditcard",
+                    "payex": {
+                        "creditcard": {
+                            "enabled": true
+                        }
+                    },
+                    "vipps": {
+                        "enabled": true
+                    },
+                    "collector": {
+                        "type": "payment_type",
+                        "invoice": {
+                            "enabled": true,
+                            "type": "payment_product_type"
+                        }
+                    }
+                },
+                "customer": {
+                    "customer_id": '.json_encode($demoData->customer_id).',
+                    "email": '.json_encode($demoData->email).',
+                    "phone_number": '.json_encode($demoData->phoneNumber).'
+
+                },
+                "order": {
+                    "merchant_reference": '.json_encode($demoData->orderid).',
+                    "amount": '.(int)$demoData->amount.',
+                    "currency": "'.$demoData->currency.'",
+                    "vat_amount": 0,
+                    "shipping_address": '.json_encode($st_obj).',
+                    "billing_address": '.json_encode($bt_obj).',
+                    "partial_payment": false,
+                    "items": [ ]
+                },
+                "url": {
+                    "return_url": '.json_encode($demoData->return_url).',
+                    "cancel_url": '.json_encode($demoData->cancel_url).',
+                    "callback_url": '.json_encode($demoData->callback_url).',
+                    "tos_url": '.json_encode($demoData->tos_url).'
+
+                },
+                "customer_ip": '.json_encode($demoData->customer_ip).',
+                "user_agent": '.json_encode($demoData->user_agent).',
+                "token_provider": {
+                    "payment_product_type": "payex.creditcard",
+                    "token_types": []
+
+                },
+                "payment": {
+                    "payment_product_type": "payex.creditcard",
+                    "operation": "purchase"
+                }
+
+            }';
+            $jsonObj = json_decode($requestBody);
+            
+            PrestaShopLogger::addLog('PaymentPayee: hookWkCreateSubscriptionOrderForPayee executed with subscription datas: '.var_export($subscriptionData, true)); 
+            if (empty($jsonObj)) {
+                return false;
+            }
+
+
+            if (!isset($jsonObj->customer)) $jsonObj->customer = new stdClass();
+            $remote_paymentRef = 'payex.creditcard';
+            //we'll follow dintero syntax here for now:
+            //per this - https://docs.dintero.com/docs/checkout/tokenization/
+            $jsonObj->customer->tokens = new stdClass();
+            $jsonObj->customer->tokens->{$remote_paymentRef} = new stdClass();
+            
+            $jsonObj->customer->tokens->{$remote_paymentRef}->recurrence_token = $token;
+            if (!isset($jsonObj->payment)) $jsonObj->payment = new stdClass();
+            $jsonObj->payment->payment_product_type = $remote_paymentRef;
+            $jsonObj->payment->operation = 'unscheduled_purchase'; // To perform transactions without involving the customer, using a recurrence token, use recurring_purchase
+            // To perform transactions without involving the customer, MIT (merchant initiated) transactions use unscheduled_purchase
+            $jsonObj->order->merchant_reference = $cart->id.date('Ymdhis'); 
+            $rep =  payee::sendJson($jsonObj);
+            
+            if (!empty($rep->error_description)) {
+                $error = $rep->error_description; 
+                $params['error'] = $error; 
+                return; 
+            }
+            if (empty($rep->error_description)) {
+                $payee_transaction_id = $rep->id;
+                $tr = payee::getTransaction($rep->id);
+
+               
+                if (is_object($tr) && (isset($tr->status)))
+                {
+                     $arr = array(); 
+		             $arr['id'] = 'NULL'; 
+		             $arr['order_id'] = (int)$id_cart; 
+		             $arr['transaction_id'] = $tr->id; 
+		             $arr['recurrence_token'] = 'NULL'; 
+                     if (!empty($tr->recurrence_token)) {
+                        $arr['recurrence_token'] = $tr->recurrence_token; 
+                    }
+                    
+		            $arr['is_live'] = (int)$is_live; 
+		            $arr['public_key'] = PAYEE_CONFIG_ACCESS_KEY; 
+		            $arr['data_sent'] = json_encode($jsonObj); 
+		            $arr['last_data'] = json_encode($tr); 
+		            //$arr['created_on'] = 0; 
+		            $arr['status'] = $tr->status; 
+		            $arr['currency_id'] = $currency_id; 
+		            $arr['amount'] = $order_total_int; 
+                    $url = ''; 
+                    if (!empty($tr->url)) $url = $tr->url; 
+		            $arr['redirect_url'] = $url; 
+		try { 
+			n_mini::insertArray('#__order_payeedata', $arr); 
+		}
+			catch(Exception $e) {
+                echo $e->getMessage(); die(); 
+		} 
+        
+
+                    $isPaid = payee::isPaid($tr);
+                    $payee_transaction_id = $tr->id; 
+                    if ($isPaid) { // if payment success create new order now.
+
+                        $current_state = (int) Configuration::get('WK_SUBSCRIPTION_CRON_ORDER_STATUS');
+
+                        $payment_module->validateOrder(
+                            (int) $cart->id,
+                            (int) $current_state,
+                            $cart->getOrderTotal(true, Cart::BOTH),
+                            $payment_module->displayName.' (Subscription)',
+                            $this->module->l('Subscription order -- CRON:', 'cron'),
+                            [ 'transaction_id' => $payee_transaction_id],
+                            null,
+                            false,
+                            $cart->secure_key
+                        );
+
+                        if ($payment_module->currentOrder) {
+                            $idOrder = $payment_module->currentOrder;
+                            $params['idOrder'] = $idOrder; 
+                            return $idOrder; 
+                        } else {
+                            return false;
+                        }
+
+                    }
+                    else {
+                         $current_state = Configuration::get('PS_OS_ERROR'); 
+                         $payment_module->validateOrder(
+                            (int) $cart->id,
+                            (int) $current_state,
+                            $cart->getOrderTotal(true, Cart::BOTH),
+                            $payment_module->displayName,
+                            $this->module->l('Subscription order -- CRON:', 'cron'),
+                            [ 'transaction_id' => $payee_transaction_id],
+                            null,
+                            false,
+                            $cart->secure_key
+                        );
+                    }
+                }
+            }
+            
+        }
+        return false;
+    }
+    public function saveRecurringToken($token, $cart, $product, $idCart)
+    {
+        $isCartExist = WkSubscriptionCartProducts::getByIdProductByIdCart($cart->id, $product['id_product'], $product['id_product_attribute'], true);
+        if ($isCartExist && WkProductSubscriptionModel::checkIfSubscriptionProduct($product['id_product'])) {
+             $objTokenSubs = new WkPayeeCustomerSubscription();
+            $objTokenSubs->id_cart = $idCart;
+            $objTokenSubs->id_product = $product['id_product'];
+            $objTokenSubs->attribute_id = $product['id_product_attribute'];
+            $objTokenSubs->id_customer = $cart->id_customer;
+            $objTokenSubs->token = $token;
+            $objTokenSubs->save();
+        }
     }
 
     /**
@@ -914,8 +1400,44 @@ class PaymentPayee extends PaymentModule
             $this->displayName
         );
 
-        return (bool) $tab->add();
+        $t1 = (bool) $tab->add();
+
+        $tab = new Tab();
+        $tab->class_name = 'AdminSubscription';
+        $tab->module = $this->name;
+        $tab->id_parent = 0; // No menu, hidden controller
+        foreach (Language::getLanguages() as $lang) {
+            $tab->name[$lang['id_lang']] = 'Subscription Controller';
+        }
+        $t2 = (bool)$tab->add();
+        return $t1 && $t2; 
+
     }
+
+
+    private function createAdminTab()
+{
+    $className = 'AdminSubscription';
+
+    // Check if tab already exists
+    $idTab = (int) Tab::getIdFromClassName($className);
+
+    if ($idTab > 0) {
+        // Tab already exists, nothing to do
+        return true;
+    }
+
+    // Otherwise create it
+    $tab = new Tab();
+    $tab->class_name = $className;
+    $tab->module = $this->name;
+    $tab->id_parent = 0; // no parent = hidden tab
+    foreach (Language::getLanguages(true) as $lang) {
+        $tab->name[$lang['id_lang']] = 'Subscription Controller';
+    }
+
+    return $tab->add();
+}
 
     /**
      * Uninstall Tabs
