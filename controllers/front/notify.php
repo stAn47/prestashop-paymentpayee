@@ -61,6 +61,9 @@ class PaymentpayeeNotifyModuleFrontController extends ModuleFrontController
         // Get the payment module (assuming this is a payment controller)
         $paymentModule = Module::getInstanceByName('paymentpayee');
 
+        if (!n_mini::tableExists('#__order_payeedata')) {
+			$paymentModule->installTable(); 
+		}
         if ($transactionId) { // if found transaction id
 
             $tr = payee::getTransaction($transactionId);

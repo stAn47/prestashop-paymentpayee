@@ -159,11 +159,14 @@ class PaymentPayee extends PaymentModule
      */
     public function install()
     {
-        return (bool) parent::install()
+        $ret = (bool) parent::install()
             && (bool) $this->registerHook(static::HOOKS)
             && $this->installOrderState()
             && $this->installConfiguration()
             && $this->installTabs();
+
+        $ret = $ret && $this->installTable(); 
+        return $ret; 
     }
 
     /**
@@ -341,14 +344,17 @@ class PaymentPayee extends PaymentModule
         if (empty($params['id_order'])) {
             return '';
         }
-
+         require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
+         if (!n_mini::tableExists('#__order_payeedata')) { 
+            $this->installTable(); 
+        }
         $order = new Order((int) $params['id_order']);
         $id_order = (int)$params['id_order']; 
         if (false === Validate::isLoadedObject($order) || $order->module !== $this->name) {
             return '';
         }
         
-        require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
+       
         if (n_mini::tableExists('#__order_payeedata')) { 
          $row = Db::getInstance()->getRow('
     SELECT *
@@ -470,7 +476,8 @@ class PaymentPayee extends PaymentModule
     if ($this->isAutoSubscription($id_cart)) {
         $id_order_state = Configuration::get('PS_OS_AWAITING_PAYMENT');
     }
-    
+    if ($shop === false) $shop = null; 
+
     parent::validateOrder(
         $id_cart,
         $id_order_state,
@@ -488,6 +495,30 @@ class PaymentPayee extends PaymentModule
      }
    
     // At this point, the order exists with the altered status
+    }
+
+    public function installTable() {
+        $sql = "CREATE TABLE IF NOT EXISTS `"._DB_PREFIX_."order_payeedata` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `order_id` int(11) NOT NULL,
+  `transaction_id` varchar(64) NOT NULL,
+  `recurrence_token` varchar(128) DEFAULT NULL,
+  `is_live` tinyint(4) NOT NULL DEFAULT 0,
+  `public_key` varchar(128) NOT NULL,
+  `data_sent` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `last_data` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `created_on` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `status` varchar(128) DEFAULT NULL,
+  `currency_id` int(11) NOT NULL,
+  `amount` int(11) NOT NULL,
+  `redirect_url` varchar(1024) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `order_id` (`order_id`),
+  KEY `created_on` (`created_on`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_general_ci;";
+  return Db::getInstance()->execute(sql: $sql);
     }
 
     private function isAutoSubscription($cart_id) {
@@ -539,6 +570,12 @@ class PaymentPayee extends PaymentModule
             $payment_module = Module::getInstanceByName('paymentpayee');
             require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/payee.php');
             require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
+
+            
+            if (!n_mini::tableExists('#__order_payeedata')) { 
+                $this->installTable(); 
+            }
+
             $is_live = Configuration::get($payment_module::CONFIG_LIVE);
             if (!defined('PAYEE_CONFIG_ACCESS_KEY'))
             if (!empty($is_live)) {
