@@ -248,7 +248,9 @@ class PaymentPayeeExternalModuleFrontController extends ModuleFrontController
 		$this->url = $url; 
 		
 		require_once(_PS_ROOT_DIR_.'/modules/paymentpayee/vendor/configuration.php');
-		$test = n_mini::tableExists('#__order_payeedata'); 
+		if (!n_mini::tableExists('#__order_payeedata')) {
+			$this->module->installTable(); 
+		}
 		$arr = array(); 
 		$arr['id'] = 'NULL'; 
 		$arr['order_id'] = (int)$cart->id; 
